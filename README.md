@@ -10,18 +10,6 @@ vs selling pressure — is a leading indicator of short-term price direction.
 
 <img width="1500" height="2400" alt="plots" src="https://github.com/user-attachments/assets/1b16abba-dd31-4bde-b77a-388a2ed149c1" />
 
-## Project Structure
-```
-quant/
-  data/
-    raw/
-      book.parquet          ← raw order book snapshots
-    processed/
-      metrics.parquet       ← computed metrics
-      plots.png             ← analysis plots
-  data.py                   ← data collection (WebSocket streaming)
-  analysis.ipynb            ← metrics, analysis and model
-```
 
 ## Methodology
 
@@ -61,6 +49,19 @@ quant/
 - When one side of the book is thin, incoming orders consume more price levels,
   resulting in greater price impact: less depth = less resistance = larger price move
 
+## Project Structure
+```
+quant/
+  data/
+    raw/
+      book.parquet          ← raw order book snapshots
+    processed/
+      metrics.parquet       ← computed metrics
+      plots.png             ← analysis plots
+  data.py                   ← data collection (WebSocket streaming)
+  analysis.ipynb            ← metrics, analysis and model
+```
+
 ## Requirements
 ```bash
 pip install pandas numpy matplotlib statsmodels scikit-learn websockets sortedcontainers
@@ -74,6 +75,3 @@ python data.py
 # run analysis
 jupyter notebook analysis.ipynb
 ```
-
-## Reference
-Cont, Kukanov, and Stoikov (2010) — *The Price Impact of Order Book Events*

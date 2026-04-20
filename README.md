@@ -1,6 +1,6 @@
-# Crypto Market Microstructure Analyzer
+# Order Book Microstructure Analysis (BTC/USDT Futures)
 
-Quantitative research project investigating whether order book imbalance (OBI) can predict 
+Goal is to investigate whether order book imbalance can predict 
 short-term price movements in BTC/USDT futures.
 
 ## Overview

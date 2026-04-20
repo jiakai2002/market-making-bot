@@ -8,6 +8,8 @@ Real-time L2 order book data is streamed from Binance Futures WebSocket and used
 microstructure metrics. The core hypothesis is that order book imbalance — a measure of buying 
 vs selling pressure — is a leading indicator of short-term price direction.
 
+<img width="1500" height="2400" alt="plots" src="https://github.com/user-attachments/assets/1b16abba-dd31-4bde-b77a-388a2ed149c1" />
+
 ## Project Structure
 ```
 quant/

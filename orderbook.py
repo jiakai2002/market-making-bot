@@ -22,7 +22,6 @@ class OrderBookManager:
         for price, size in r["asks"]:
             self.asks[float(price)] = float(size)
         self.ready = True
-        print(f"Snapshot loaded. Last update ID: {self.last_update_id}")
 
     def apply_update(self, data):
         for price, size in data.get("b", []):

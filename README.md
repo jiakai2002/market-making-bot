@@ -1,4 +1,4 @@
-# Market Maker Bot
+# market making bot
 
 Inspired by the Avellaneda-Stoikov (2008) model. Supports live trading and backtesting on BTC/USDT perpetual futures from Binance.
 

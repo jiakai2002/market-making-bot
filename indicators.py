@@ -12,7 +12,6 @@ warnings.simplefilter("ignore", OptimizeWarning)
 class VolatilityEstimator:
     """
     EWMA volatility on log returns, scaled to horizon_sec.
-    Fix 7: returns (sigma, vol_ratio) so caller can detect spikes.
     """
 
     def __init__(self, lambda_=0.97, floor=1e-6, cap=0.5,
@@ -69,9 +68,6 @@ class VolatilityEstimator:
 class TradingIntensityIndicator:
     """
     Estimates κ and α by fitting λ(δ) = α·exp(−κ·δ) to live trade data.
-
-    Fix 1: normalises aggregated volume by window duration → arrival rate proxy.
-    Fix 2: timestamped mid-price buffer so price_level uses mid just before trade.
     """
 
     def __init__(self, sampling_length: int = 30, min_samples: int = 10,
@@ -91,21 +87,12 @@ class TradingIntensityIndicator:
         self.alpha: float = 1.0
         self.kappa: float = 1.5
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def update_mid(self, best_bid: float, best_ask: float, timestamp_ms: int):
         """Call on every order-book tick. Fix 2: stores timestamped snapshot."""
         mid = 0.5 * (best_bid + best_ask)
         self._mid_history.append((timestamp_ms, mid))
 
     def on_trade(self, price: float, qty: float, timestamp_ms: int):
-        """
-        Call on every aggTrade event.
-        Fix 2: resolves mid from the snapshot just before the trade,
-        not the most-recently-seen mid.
-        """
         mid = self._mid_at(timestamp_ms)
         if mid is None:
             return
@@ -126,12 +113,7 @@ class TradingIntensityIndicator:
         if self.ready:
             self._fit()
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _mid_at(self, timestamp_ms: int) -> Optional[float]:
-        """Fix 2: last mid whose timestamp is strictly before the trade."""
         result = None
         for ts, mid in self._mid_history:
             if ts < timestamp_ms:
@@ -151,7 +133,6 @@ class TradingIntensityIndicator:
                 pl = t["price_level"]
                 trades_consolidated[pl] = trades_consolidated.get(pl, 0) + t["amount"]
 
-        # Fix 1: convert to arrival rate (volume / sec) so κ is window-size invariant
         timestamps = self._samples.keys()
         window_duration_sec = (max(timestamps) - min(timestamps)) / 1000.0
 

@@ -42,6 +42,7 @@ class MarketMaker:
             horizon_sec=self.cfg.vol_horizon_sec,
             cap=self.cfg.vol_cap,
             floor=self.cfg.vol_floor,
+            warmup=self.cfg.vol_warmup,
         )
         self.kappa_calib = TradingIntensityIndicator(
             sampling_length=self.cfg.kappa_sampling_length,

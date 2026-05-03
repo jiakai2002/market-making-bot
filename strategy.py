@@ -20,8 +20,9 @@ class ASConfig:
     max_spread: float = 20.0
 
     # Volatility estimator
+    vol_warmup: int = 600
     vol_horizon_sec: float = 1.0
-    vol_cap: float = 0.5
+    vol_cap: float = 0.05
     vol_floor: float = 1e-6
     vol_spike_threshold: float = 2.0   # vol_ratio above this → emergency cancel
 

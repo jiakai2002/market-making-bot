@@ -25,7 +25,7 @@ class Fill:
 
 class Exchange:
 
-    def __init__(self, fee_bps: float = 2.0):
+    def __init__(self, fee_bps: float = 1.5):
         self.fee_rate = fee_bps / 10_000
         self._orders: dict[int, Order] = {}
         self._next_id = 0

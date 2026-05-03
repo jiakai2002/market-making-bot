@@ -15,7 +15,7 @@ class VolatilityEstimator:
     """
 
     def __init__(self, lambda_=0.97, floor=1e-6, cap=0.5,
-                 horizon_sec=1.0, warmup=20):
+                 horizon_sec=1.0, warmup=600):
         self.lambda_ = lambda_
         self.floor = floor
         self.cap = cap
@@ -26,7 +26,7 @@ class VolatilityEstimator:
         self.var_per_sec = floor * floor
         self.samples = 0
         self.last_sigma = floor
-        self._prev_sigma = floor
+        self._sigma_history: deque = deque(maxlen=20)
 
     def update(self, mid: float, ts_ms: int) -> Tuple[float, float]:
         """Returns (sigma, vol_ratio). vol_ratio > spike_threshold → cancel quotes."""
@@ -43,7 +43,7 @@ class VolatilityEstimator:
 
         # get log returns
         r = math.log(mid / self.prev_mid)
-        r = max(min(r, 0.05), -0.05)
+        r = max(min(r, 0.01), -0.01)
         self.prev_mid = mid
         self.prev_ts = ts_ms
 
@@ -57,8 +57,10 @@ class VolatilityEstimator:
         # back to USD
         new_sigma = sigma_log * mid
 
-        vol_ratio = new_sigma / max(self._prev_sigma, self.floor)
-        self._prev_sigma = new_sigma
+        # vol ratio
+        self._sigma_history.append(new_sigma)
+        baseline = np.mean(self._sigma_history) if self._sigma_history else self.floor
+        vol_ratio = new_sigma / max(baseline, self.floor)
         self.last_sigma = new_sigma
         self.samples += 1
         return self.last_sigma, vol_ratio

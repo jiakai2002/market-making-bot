@@ -1,7 +1,6 @@
 # market making bot
 
-Inspired by the Avellaneda-Stoikov (2008) model.
-Supports live trading and backtesting on BTC/USDT from Binance.
+Inspired by the Avellaneda-Stoikov (2008) model. Supports live trading and backtesting on BTC/USDT from Binance.
 
 <img width="575" height="562" alt="Screenshot 2026-05-03 at 2 55 19 AM" src="https://github.com/user-attachments/assets/f28b205b-0263-41a6-b26f-cf179de82e93" />
 
@@ -57,23 +56,59 @@ Both streams run as concurrent coroutines — trade events feed the κ estimator
 
 ## κ Estimation
 
-Fits `λ(δ) = α · exp(−κ · δ)` to live aggTrade data, where δ is each trade's distance from mid at the time of the trade.
-
-- **Timestamped mid buffer** — δ resolved against mid just before the trade, not current mid
-- **Arrival rate normalisation** — volume divided by window duration so κ is window-size invariant
-- **EMA smoothing** — `κ ← (1−α)·κ_prev + α·κ_new` with hard clamp `[kappa_min, kappa_max]`
-- **Fallback** — last valid estimate retained on fit failure
+aggTrade WS                          depth WS
+    |                                    |
+    | price, qty, timestamp_ms           | best_bid, best_ask, timestamp_ms
+    v                                    v
+on_trade()                          update_mid()
+    |                                    |
+    |   .-- lookup mid at trade time ----|
+    |  /      from _mid_history deque <--'
+    | /
+    | delta = |price - mid|
+    |
+    v
+_current_sample  <-- accumulates {price_level, amount} per trade
+    |
+    | flush_sample()  <-- called every kappa_recalib_ticks
+    |                     seals bucket, evicts oldest if > 30
+    v
+_samples dict  [t0: [...], t1: [...], ..., tN: [...]]
+    |                rolling window, max 30 buckets
+    | when len(_samples) >= min_samples
+    v
+_fit()
+    |
+    | 1. aggregate volume by price level across all buckets
+    | 2. normalise by window duration  →  lambda (BTC/s)
+    | 3. curve_fit:  lambda(delta) = alpha * exp(-kappa * delta)
+    | 4. clip kappa to [0.05, 50]
+    | 5. EMA blend:  kappa = 0.8 * kappa_prev + 0.2 * kappa_new
+    |    (on fit failure: retain last valid kappa)
+    v
+self.kappa  →  ASConfig.kappa  →  A-S spread formula
 
 ## Volatility
 
-EWMA on log returns, output in absolute price units:
-
-```
-σ²_t = λ · σ²_{t-1} + (1−λ) · r²_t / dt
-σ    = sqrt(σ² · horizon_sec) · mid
-```
-
-Returns `(sigma, vol_ratio)`. When `vol_ratio > vol_spike_threshold`, quotes are cancelled and κ recalibration is forced immediately.
+raw mid price
+    │
+    v
+log return r = log(mid / prev_mid)        ← winsorised ±5%
+    │
+    v
+inst_var = r² / dt                        ← per-second rate
+    │
+    v
+var_per_sec = λ·var_prev + (1−λ)·inst     ← EWMA smoothing
+    │
+    v
+sigma_log = sqrt(var_per_sec · horizon)   ← horizon scaling
+    │
+    v
+sigma = sigma_log · mid                   ← log to price
+    │
+    ├──→ returned to A-S quoter for r and δ
+    └──→ vol_ratio = sigma / prev_sigma   → spike detection
 
 ## Run
 

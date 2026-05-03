@@ -11,7 +11,7 @@ warnings.simplefilter("ignore", OptimizeWarning)
 
 class VolatilityEstimator:
     """
-    EWMA volatility on log returns, scaled to horizon_sec.
+    EWMA volatility on log returns, scaled to time horizon.
     """
 
     def __init__(self, lambda_=0.97, floor=1e-6, cap=0.5,
@@ -26,7 +26,7 @@ class VolatilityEstimator:
         self.var_per_sec = floor * floor
         self.samples = 0
         self.last_sigma = floor
-        self._prev_sigma = floor  # Fix 7: track prior sigma for spike ratio
+        self._prev_sigma = floor
 
     def update(self, mid: float, ts_ms: int) -> Tuple[float, float]:
         """Returns (sigma, vol_ratio). vol_ratio > spike_threshold → cancel quotes."""
@@ -41,19 +41,22 @@ class VolatilityEstimator:
         if dt <= 0:
             return self.last_sigma, 1.0
 
+        # get log returns
         r = math.log(mid / self.prev_mid)
         r = max(min(r, 0.05), -0.05)
         self.prev_mid = mid
         self.prev_ts = ts_ms
 
+        # variance per-second
         inst_var = (r * r) / max(dt, 1e-3)
+        # EWMA update
         self.var_per_sec = self.lambda_ * self.var_per_sec + (1.0 - self.lambda_) * inst_var
-
+        # expected volatility over next h seconds
         sigma_log = math.sqrt(self.var_per_sec * self.horizon_sec)
         sigma_log = max(self.floor, min(self.cap, sigma_log))
+        # back to USD
         new_sigma = sigma_log * mid
 
-        # Fix 7: compute spike ratio before updating
         vol_ratio = new_sigma / max(self._prev_sigma, self.floor)
         self._prev_sigma = new_sigma
         self.last_sigma = new_sigma
@@ -79,7 +82,6 @@ class TradingIntensityIndicator:
         self.kappa_min = kappa_min
         self.kappa_max = kappa_max
 
-        # Fix 2: ring-buffer of (timestamp_ms, mid) snapshots
         self._mid_history: deque[Tuple[int, float]] = deque(maxlen=mid_history_len)
 
         self._current_sample: list[dict] = []
@@ -88,7 +90,6 @@ class TradingIntensityIndicator:
         self.kappa: float = 1.5
 
     def update_mid(self, best_bid: float, best_ask: float, timestamp_ms: int):
-        """Call on every order-book tick. Fix 2: stores timestamped snapshot."""
         mid = 0.5 * (best_bid + best_ask)
         self._mid_history.append((timestamp_ms, mid))
 

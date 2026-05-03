@@ -153,7 +153,7 @@ class MarketMaker:
                 self._cancel_stale_quotes()
                 self._place_quotes(bid_px, ask_px, half, ts)
 
-            if self._tick_count % 200 == 0:
+            if self._tick_count % 5 == 0:
                 self._log_status(mid, bid_px, ask_px, half, sigma, q, vol_ratio)
 
         self._log.append({
@@ -171,23 +171,31 @@ class MarketMaker:
         bid_d = round(math.floor(bid_px / tick) * tick, 2) if bid_px else "N/A"
         ask_d = round(math.ceil(ask_px / tick) * tick, 2) if ask_px else "N/A"
         fill_rate = (self._fills_bid + self._fills_ask) / max(self._quotes_placed, 1) * 100
-        logger.info(
-            f"\n{'-'*38}\n"
-            f"  mid         = ${mid:.2f}\n"
-            f"  bid / ask   = ${bid_d} / ${ask_d}\n"
-            f"  half spread = ${half:.2f}\n"
-            f"  sigma       = ${sigma:.4f}\n"
-            f"  vol ratio   = {vol_ratio:.3f}\n"
-            f"  tau         = {self.quoter.time_factor(vol_ratio):.3f}\n"
-            f"  gamma       = {self.quoter.effective_gamma(mid, q, sigma):.4f}\n"
-            f"  kappa       = {self.cfg.kappa:.3f}\n"
-            f"  size        = {self.quoter.order_size(q):.6f} BTC\n"
-            f"  inventory   = {self.inventory:+.4f} BTC\n"
-            f"  PnL         = ${pnl:+.4f}\n"
-            f"  fills       = {self._fills_bid}b / {self._fills_ask}a\n"
-            f"  fill rate   = {fill_rate:.1f}%\n"
-            f"{'-'*38}\n"
-        )
+
+        lines = [
+            f"{'─'*38}",
+            f"  mid         = ${mid:.2f}",
+            f"  bid / ask   = ${bid_d} / ${ask_d}",
+            f"  half spread = ${half:.2f}",
+            f"  sigma       = ${sigma:.4f}",
+            f"  vol ratio   = {vol_ratio:.3f}",
+            f"  gamma       = {self.cfg.gamma:.4f}",
+            f"  kappa       = {self.cfg.kappa:.3f}",
+            f"  inventory   = {self.inventory:+.4f} BTC",
+            f"  PnL         = ${pnl:+.4f}",
+            f"  fills       = {self._fills_bid}b / {self._fills_ask}a",
+            f"  fill rate   = {fill_rate:.1f}%",
+            f"{'─'*38}",
+        ]
+
+        if not hasattr(self, '_status_drawn'):
+            self._status_drawn = True
+            print("\n".join(lines), flush=True)
+        else:
+            n = len(lines)
+            print(f"\033[{n}A", end="")  # move cursor up n lines
+            for line in lines:
+                print(f"\033[K{line}")   # clear line then print
 
     def run(self, df: pd.DataFrame) -> dict:
         logger.info(f"Running backtest on {len(df)} ticks…")

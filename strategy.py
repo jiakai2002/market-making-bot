@@ -13,14 +13,9 @@ class ASConfig:
     # infinite_horizon=True → τ=1, correct for 24/7 crypto
     # infinite_horizon=False → vol-driven decay via tau_decay
     infinite_horizon: bool = True
-    tau_decay: float = 0.5      # sensitivity when infinite_horizon=False
+    tau_decay: float = 0.5
 
-    # Dynamic gamma: recomputed each cycle from spread bounds + inventory
-    dynamic_gamma: bool = True
-    inventory_risk_aversion: float = 0.5   # IRA ∈ (0, 1]
-    gamma_cap: float = 2.0
-
-    # Spread bounds used by dynamic gamma
+    # Spread bounds
     min_spread: float = 0.50
     max_spread: float = 20.0
 
@@ -57,15 +52,6 @@ class ASQuoter:
             return 1.0
         return math.exp(-self.cfg.tau_decay * max(vol_ratio - 1.0, 0.0))
 
-    def effective_gamma(self, mid: float, q: float, sigma: float) -> float:
-        """γ recomputed each cycle so it scales with vol and inventory skew."""
-        if not self.cfg.dynamic_gamma or abs(q) < 1e-8:
-            return self.cfg.gamma
-        sigma_log = sigma / max(mid, 1e-8)
-        spread_range = self.cfg.max_spread - self.cfg.min_spread
-        gamma_max = spread_range / max(2.0 * abs(q) * sigma_log ** 2, 1e-12)
-        return min(gamma_max * self.cfg.inventory_risk_aversion, self.cfg.gamma_cap)
-
     def order_size(self, q: float) -> float:
         """Size decays with |q| when eta_decay > 0 (Fushimi et al. 2018)."""
         if self.cfg.eta_decay <= 0:
@@ -74,14 +60,14 @@ class ASQuoter:
 
     def reservation_price(self, mid: float, q: float, sigma: float,
                           vol_ratio: float = 1.0) -> float:
-        gamma = self.effective_gamma(mid, q, sigma)
+        gamma = self.cfg.gamma
         sigma_log = sigma / max(mid, 1e-8)
         tau = self.time_factor(vol_ratio)
         return mid - q * gamma * (sigma_log ** 2) * tau
 
     def optimal_spread(self, mid: float, q: float, sigma: float,
                        vol_ratio: float = 1.0) -> float:
-        gamma = self.effective_gamma(mid, q, sigma)
+        gamma = self.cfg.gamma
         sigma_log = sigma / max(mid, 1e-8)
         tau = self.time_factor(vol_ratio)
         kappa = self.cfg.kappa

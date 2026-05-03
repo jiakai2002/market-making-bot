@@ -1,6 +1,7 @@
 # market making bot
 
-Inspired by the Avellaneda-Stoikov (2008) model. Supports live trading and backtesting on BTC/USDT perpetual futures from Binance.
+Inspired by the Avellaneda-Stoikov (2008) model.
+Supports live trading and backtesting on BTC/USDT from Binance.
 
 <img width="575" height="562" alt="Screenshot 2026-05-03 at 2 55 19 AM" src="https://github.com/user-attachments/assets/f28b205b-0263-41a6-b26f-cf179de82e93" />
 

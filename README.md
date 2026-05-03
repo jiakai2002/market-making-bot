@@ -56,59 +56,11 @@ Both streams run as concurrent coroutines — trade events feed the κ estimator
 
 ## κ Estimation
 
-aggTrade WS                          depth WS
-    |                                    |
-    | price, qty, timestamp_ms           | best_bid, best_ask, timestamp_ms
-    v                                    v
-on_trade()                          update_mid()
-    |                                    |
-    |   .-- lookup mid at trade time ----|
-    |  /      from _mid_history deque <--'
-    | /
-    | delta = |price - mid|
-    |
-    v
-_current_sample  <-- accumulates {price_level, amount} per trade
-    |
-    | flush_sample()  <-- called every kappa_recalib_ticks
-    |                     seals bucket, evicts oldest if > 30
-    v
-_samples dict  [t0: [...], t1: [...], ..., tN: [...]]
-    |                rolling window, max 30 buckets
-    | when len(_samples) >= min_samples
-    v
-_fit()
-    |
-    | 1. aggregate volume by price level across all buckets
-    | 2. normalise by window duration  →  lambda (BTC/s)
-    | 3. curve_fit:  lambda(delta) = alpha * exp(-kappa * delta)
-    | 4. clip kappa to [0.05, 50]
-    | 5. EMA blend:  kappa = 0.8 * kappa_prev + 0.2 * kappa_new
-    |    (on fit failure: retain last valid kappa)
-    v
-self.kappa  →  ASConfig.kappa  →  A-S spread formula
+<img width="467" height="474" alt="Screenshot 2026-05-03 at 11 37 48 AM" src="https://github.com/user-attachments/assets/be488247-c6ce-4be6-929a-15c960bfe51b" />
 
 ## Volatility
 
-raw mid price
-    │
-    v
-log return r = log(mid / prev_mid)        ← winsorised ±5%
-    │
-    v
-inst_var = r² / dt                        ← per-second rate
-    │
-    v
-var_per_sec = λ·var_prev + (1−λ)·inst     ← EWMA smoothing
-    │
-    v
-sigma_log = sqrt(var_per_sec · horizon)   ← horizon scaling
-    │
-    v
-sigma = sigma_log · mid                   ← log to price
-    │
-    ├──→ returned to A-S quoter for r and δ
-    └──→ vol_ratio = sigma / prev_sigma   → spike detection
+<img width="435" height="338" alt="Screenshot 2026-05-03 at 11 38 29 AM" src="https://github.com/user-attachments/assets/650cbcdf-00bc-4140-b6b7-9c9843d59cc2" />
 
 ## Run
 

@@ -121,8 +121,9 @@ class MarketMaker:
         sigma, vol_ratio = self.vol_est.update(mid, ts)
 
         if not self.vol_est.ready:
-            if self._tick_count % 10 == 0:
-                logger.info(f"warming up volatility... {self.vol_est.samples}/{self.vol_est.warmup}")
+            if self._tick_count % 50 == 0:
+                remaining = (self.vol_est.warmup - self.vol_est.samples) * 0.1
+                logger.info(f"calculating volatility... {remaining:.0f}s to start trading")
             self._tick_count += 1
             return
 

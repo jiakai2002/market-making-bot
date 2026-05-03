@@ -55,7 +55,7 @@ Both streams run as concurrent coroutines — trade events feed the κ estimator
 | `kappa_min_samples` | `10` | Minimum samples before κ estimation begins |
 
 ## Volatility
-
+```
 mid (each tick)
     |
     | r  = clip(log(mid / prev_mid), ±0.05)
@@ -72,9 +72,10 @@ mid (each tick)
     |
     |-- sigma ------->  A-S reservation price + spread
     '-- vol_ratio -->  > threshold?  cancel quotes + force recalib
+```
 
 ## κ Estimation
-
+```
 # two async streams run concurrently
 
 aggTrade WS                          depth WS
@@ -107,6 +108,7 @@ _fit()
     |    (on fit failure: retain last valid kappa)
     v
 self.kappa  ->  ASConfig.kappa  ->  A-S spread formula
+```
 
 ## Run
 

@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import pandas as pd
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from config import SYMBOL, WS_URL, MAX_LEVELS, MAX_RECENT_TRADES, QUOTE_SIZE
@@ -23,7 +24,7 @@ os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("mm")
 logger.setLevel(logging.INFO)
 handler = logging.FileHandler("logs/events.log")
-handler.setFormatter(logging.Formatter("%(message)s"))
+handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
 logger.addHandler(handler)
 logger.propagate = False
 
@@ -37,6 +38,7 @@ exchange     = Exchange()
 kill_switch  = KillSwitch()
 risk         = RiskLimits()
 rows         = []
+SESSION_FILE = f"data/{SYMBOL}_{int(time.time())}.parquet"
 
 
 @dataclass
@@ -61,6 +63,9 @@ def update_features():
     mid  = snap["mid"]
     if mid is None:
         return
+    now_ms    = int(time.time() * 1000)
+    dt        = max((now_ms - fs.last_update_ms) / 1000.0, 0.01) if fs.last_update_ms else 1.0
+
     spread    = snap["spread"] or 1e-8
     mp        = microprice(orderbook)
     obi       = orderbook_imbalance(orderbook)
@@ -70,7 +75,10 @@ def update_features():
     fs.spread = spread
     fs.obi    = obi
     fs.tfi    = tfi
-    fs.vols   = volatility.update(mid_return(mid, fs.prev_mid))
+    fs.vols = volatility.update(
+        mid_return(mid, fs.prev_mid), dt,
+        orderbook.best_bid[0], orderbook.best_ask[0]
+    )
     fs.alpha  = alpha_model.compute(
         book_imbalance=obi,
         trade_imbalance=tfi,
@@ -84,9 +92,13 @@ def update_features():
 def save_parquet():
     if not rows:
         return
-    path = f"data/{SYMBOL}_{int(time.time())}.parquet"
-    pd.DataFrame(rows).to_parquet(path, index=False)
-    logger.info(f"PARQUET_SAVE rows={len(rows)} file={path}")
+    new = pd.DataFrame(rows)
+    if Path(SESSION_FILE).exists():
+        existing = pd.read_parquet(SESSION_FILE)
+        pd.concat([existing, new], ignore_index=True).to_parquet(SESSION_FILE, index=False)
+    else:
+        new.to_parquet(SESSION_FILE, index=False)
+    logger.info(f"PARQUET_SAVE rows={len(rows)} file={SESSION_FILE}")
     rows.clear()
 
 
@@ -121,21 +133,22 @@ async def printer():
             fair        = strategy.fair_value(fs.mid, fs.alpha, exchange.inventory)
             half_spread = strategy.half_spread(vol, fs.mid, abs(fs.tfi))
             bid, ask    = strategy.quotes(fair, half_spread)
-            quoting     = kill_switch.allow_trading() and risk.allow_quotes(
+            bid_ok, ask_ok = risk.allow_quotes(
                 inventory=exchange.inventory, vol=vol, tfi=fs.tfi,
                 last_update_ms=fs.last_update_ms, now_ms=int(time.time() * 1000),
                 mid=fs.mid,
-            )
+            ) if kill_switch.allow_trading() else (False, False)
             exchange.cancel_all()
-            if quoting:
-                ts = int(time.time() * 1000)
-                buy_id  = exchange.place_limit_order("buy",  bid, QUOTE_SIZE, ts)
-                sell_id = exchange.place_limit_order("sell", ask, QUOTE_SIZE, ts)
+            ts = int(time.time() * 1000)
+            if bid_ok:
+                buy_id = exchange.place_limit_order("buy", bid, QUOTE_SIZE, ts)
                 logger.info(f"ORDER BUY id={buy_id} px={bid:.2f}")
+            if ask_ok:
+                sell_id = exchange.place_limit_order("sell", ask, QUOTE_SIZE, ts)
                 logger.info(f"ORDER SELL id={sell_id} px={ask:.2f}")
-            else:
-                logger.info(f"QUOTES BLOCKED — {', '.join(risk.reasons)}")
-
+            if not bid_ok or not ask_ok:
+                reasons = risk.reasons or [kill_switch.reason]
+                logger.info(f"QUOTES BLOCKED — {', '.join(reasons)}")
             rows.append({
                 "timestamp":   fs.last_update_ms,
                 "bid_0_price": orderbook.best_bid[0] if orderbook.best_bid else 0.0,
@@ -173,7 +186,8 @@ async def printer():
             print(f"PnL        : {exchange.pnl(fs.mid):+.2f}")
             print(f"HalfSpread : {half_spread:.2f}")
             print(f"QUOTE      : BID {bid:.2f} | ASK {ask:.2f}")
-            print(f"Quoting    : {'YES' if quoting else 'NO — ' + (kill_switch.reason or ', '.join(risk.reasons))}")
+            sides = "".join(["BID " if bid_ok else "", "ASK" if ask_ok else ""]).strip()
+            print(f"Quoting    : {sides if sides else 'NO — ' + ', '.join(risk.reasons or [kill_switch.reason])}")
             if fs.vols:
                 print(f"Vols       : {fs.vols['vol_10s']:.6f} | {fs.vols['vol_60s']:.6f} | {fs.vols['vol_5m']:.6f}")
 

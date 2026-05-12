@@ -33,7 +33,6 @@ class Exchange:
 
         self.cash_flow = 0.0
 
-    # ORDER ENTRY
     def place_limit_order(self, side: str, price: float, size: float, timestamp: int) -> int:
         oid = self.next_id
         self.next_id += 1
@@ -49,7 +48,6 @@ class Exchange:
     def cancel_all(self):
         self.orders.clear()
 
-    # EXECUTION ENGINE
     def check_fills(self, row: dict) -> list[Fill]:
         best_bid = row["bid_0_price"]
         best_ask = row["ask_0_price"]

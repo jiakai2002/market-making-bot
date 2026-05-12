@@ -33,10 +33,24 @@ class RiskLimits:
         self.max_stale_ms  = MAX_STALE_MS
         self.reasons: list[str] = []
 
-    def allow_quotes(self, inventory, vol, tfi, last_update_ms, now_ms, mid) -> bool:
+    def allow_quotes(self, inventory, vol, tfi, last_update_ms, now_ms, mid):
         self.reasons = []
-        if abs(inventory)              > self.max_inventory: self.reasons.append("inventory")
-        if vol * mid                   > self.max_vol:       self.reasons.append("vol")
-        if abs(tfi)                    > self.max_toxicity:  self.reasons.append("toxicity")
-        if (now_ms - last_update_ms)   > self.max_stale_ms:  self.reasons.append("stale")
-        return not self.reasons
+        hard_block = []
+        if vol * mid > self.max_vol:
+            hard_block.append("vol")
+        if (now_ms - last_update_ms) > self.max_stale_ms:
+            hard_block.append("stale")
+        if hard_block:
+            self.reasons = hard_block
+            return False, False
+
+        bid_ok = inventory <  self.max_inventory
+        ask_ok = inventory > -self.max_inventory
+
+        if abs(tfi) > self.max_toxicity:
+            self.reasons.append("toxicity")
+            return False, False
+
+        if not bid_ok: self.reasons.append("inventory")
+        if not ask_ok: self.reasons.append("inventory")
+        return bid_ok, ask_ok

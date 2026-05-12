@@ -2,6 +2,7 @@
 
 A live paper-trading market maker for BTC/USDT on Binance. Computes dynamic bid/ask quotes using orderbook signals, manages inventory risk, and logs all activity for backtesting.
 
+<img width="653" height="454" alt="mm" src="https://github.com/user-attachments/assets/c04c7b8e-378b-464d-8f62-496ad1266c89" />
 ---
 
 ## How It Works

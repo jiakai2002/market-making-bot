@@ -5,7 +5,7 @@ import time
 import pandas as pd
 from dataclasses import dataclass, field
 
-from config import SYMBOL, WS_URL, SNAPSHOT_INTERVAL, MAX_LEVELS, MAX_RECENT_TRADES
+from config import SYMBOL, WS_URL, MAX_LEVELS, MAX_RECENT_TRADES, QUOTE_SIZE
 from market.binance_ws import BinanceWSClient
 from market.orderbook import OrderBook
 from market.trade_buffer import TradeBuffer
@@ -33,7 +33,7 @@ market_state = MarketState(orderbook, trades)
 volatility   = MultiHorizonVol()
 alpha_model  = AlphaSignal()
 strategy     = Strategy()
-exchange     = Exchange(fee_bps=1.5, fill_prob=0.7)
+exchange     = Exchange()
 kill_switch  = KillSwitch()
 risk         = RiskLimits()
 rows         = []
@@ -61,17 +61,17 @@ def update_features():
     mid  = snap["mid"]
     if mid is None:
         return
-    spread     = snap["spread"] or 1e-8
-    mp         = microprice(orderbook)
-    obi        = orderbook_imbalance(orderbook)
-    tfi        = trade_flow_imbalance(trades)
-    fs.mid     = mid
-    fs.mp      = mp
-    fs.spread  = spread
-    fs.obi     = obi
-    fs.tfi     = tfi
-    fs.vols    = volatility.update(mid_return(mid, fs.prev_mid))
-    fs.alpha   = alpha_model.compute(
+    spread    = snap["spread"] or 1e-8
+    mp        = microprice(orderbook)
+    obi       = orderbook_imbalance(orderbook)
+    tfi       = trade_flow_imbalance(trades)
+    fs.mid    = mid
+    fs.mp     = mp
+    fs.spread = spread
+    fs.obi    = obi
+    fs.tfi    = tfi
+    fs.vols   = volatility.update(mid_return(mid, fs.prev_mid))
+    fs.alpha  = alpha_model.compute(
         book_imbalance=obi,
         trade_imbalance=tfi,
         microprice_edge=(mp - mid) / spread,
@@ -84,7 +84,7 @@ def update_features():
 def save_parquet():
     if not rows:
         return
-    path = f"data/{SYMBOL.lower()}_{int(time.time())}.parquet"
+    path = f"data/{SYMBOL}_{int(time.time())}.parquet"
     pd.DataFrame(rows).to_parquet(path, index=False)
     logger.info(f"PARQUET_SAVE rows={len(rows)} file={path}")
     rows.clear()
@@ -103,10 +103,9 @@ async def on_message(msg):
                 "timestamp":   int(time.time() * 1000),
             }):
                 logger.info(f"FILL {f.side.upper()} px={f.price:.2f} sz={f.size:.4f} fee={f.fee:.6f}")
-        elif "trade" in stream:
+        elif "aggTrade" in stream:
             trades.add_trade(data)
             fs.tfi = trade_flow_imbalance(trades)
-
     except RuntimeError as e:
         logger.warning(f"RESYNC reason={e}")
         kill_switch.on_resync()
@@ -130,8 +129,8 @@ async def printer():
             exchange.cancel_all()
             if quoting:
                 ts = int(time.time() * 1000)
-                buy_id  = exchange.place_limit_order("buy",  bid, 0.01, ts)
-                sell_id = exchange.place_limit_order("sell", ask, 0.01, ts)
+                buy_id  = exchange.place_limit_order("buy",  bid, QUOTE_SIZE, ts)
+                sell_id = exchange.place_limit_order("sell", ask, QUOTE_SIZE, ts)
                 logger.info(f"ORDER BUY id={buy_id} px={bid:.2f}")
                 logger.info(f"ORDER SELL id={sell_id} px={ask:.2f}")
             else:
@@ -157,6 +156,7 @@ async def printer():
                 "vol_60s":     fs.vols.get("vol_60s", 0.0),
                 "vol_5m":      fs.vols.get("vol_5m",  0.0),
             })
+
             if len(rows) % 100 == 0:
                 save_parquet()
 
@@ -173,11 +173,11 @@ async def printer():
             print(f"PnL        : {exchange.pnl(fs.mid):+.2f}")
             print(f"HalfSpread : {half_spread:.2f}")
             print(f"QUOTE      : BID {bid:.2f} | ASK {ask:.2f}")
-            print(f"Quoting    : {'YES' if quoting else 'NO — ' + (kill_switch.reason or 'risk limit')}")
+            print(f"Quoting    : {'YES' if quoting else 'NO — ' + (kill_switch.reason or ', '.join(risk.reasons))}")
             if fs.vols:
                 print(f"Vols       : {fs.vols['vol_10s']:.6f} | {fs.vols['vol_60s']:.6f} | {fs.vols['vol_5m']:.6f}")
 
-        await asyncio.sleep(SNAPSHOT_INTERVAL)
+        await asyncio.sleep(1.0)
 
 
 async def main():

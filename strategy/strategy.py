@@ -1,25 +1,20 @@
 from utils.math import round_to_tick
+from config import BASE_SPREAD, VOL_MULT, TOX_MULT, INV_K, TICK_SIZE
 
 
 class Strategy:
-    def __init__(self, base_spread=0.5, vol_mult=5.0, tox_mult=2.0,
-                 inv_k=2.0, tick_size=0.5):
-        self.base_spread = base_spread
-        self.vol_mult    = vol_mult
-        self.tox_mult    = tox_mult
-        self.inv_k       = inv_k
-        self.tick_size   = tick_size
+    def __init__(self):
+        self.base_spread = BASE_SPREAD
+        self.vol_mult    = VOL_MULT
+        self.tox_mult    = TOX_MULT
+        self.inv_k       = INV_K
+        self.tick_size   = TICK_SIZE
 
     def fair_value(self, mid, alpha, inventory):
-        alpha_shift    = alpha * mid * 0.001
-        inventory_skew = self.inv_k * inventory
-        return mid + alpha_shift - inventory_skew
+        return mid + alpha * mid * 0.001 - self.inv_k * inventory
 
     def half_spread(self, vol, mid, toxicity):
-        return max(
-            self.base_spread + self.vol_mult * vol * mid + self.tox_mult * toxicity,
-            0.01
-        )
+        return max(self.base_spread + self.vol_mult * vol * mid + self.tox_mult * toxicity, 0.01)
 
     def quotes(self, fair, half_spread):
         bid = round_to_tick(fair - half_spread, self.tick_size)

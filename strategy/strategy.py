@@ -16,10 +16,8 @@ class Strategy:
         return mid + alpha * mid * 0.001 - self.inv_k * inv_norm
 
     def half_spread(self, vol, mid, toxicity):
-        vol_floor = 2e-5
-        vol_eff   = max(vol, vol_floor)
         return max(
-            self.base_spread + self.vol_mult * vol_eff * mid + self.tox_mult * toxicity,
+            self.base_spread + self.vol_mult * vol * mid + self.tox_mult * toxicity,
             0.01
         )
 

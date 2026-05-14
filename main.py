@@ -92,7 +92,7 @@ def update_features():
     )
     fs.prev_mid       = mid
     fs.last_update_ms = int(time.time() * 1000)
-    fs.ready          = True
+    fs.ready = volatility.warmed_up
 
 
 def save_parquet():
@@ -111,6 +111,9 @@ def save_parquet():
 async def refresh_quotes():
     """Called on every depth update (~100ms). Cancels stale quotes and places fresh ones."""
     if not fs.ready:
+        counts = [volatility.fast.n, volatility.mid.n, volatility.slow.n]
+        warmup = volatility.fast.warmup
+        logger.info(f"Calculating volatility {min(counts)}/{warmup} ticks")
         return
 
     vol         = fs.vols.get("vol_10s", 0.0)

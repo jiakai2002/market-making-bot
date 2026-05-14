@@ -4,22 +4,29 @@ from config import W_BOOK_IMBALANCE, W_TRADE_IMBALANCE, W_MICROPRICE_EDGE
 
 
 class EWMAVolatility:
-    def __init__(self, tau_seconds: float):
-        self.var = None
-        self.tau = tau_seconds
+    def __init__(self, tau_seconds: float, warmup: int = 10):
+        self.var     = None
+        self.tau     = tau_seconds
+        self.warmup  = warmup
+        self.n       = 0
 
     def update(self, log_ret: float, dt: float) -> float:
-        alpha  = 1.0 - math.exp(-dt / self.tau)
-        x      = (log_ret * log_ret) / dt        # variance rate
+        alpha    = 1.0 - math.exp(-dt / self.tau)
+        x        = (log_ret * log_ret) / dt
         self.var = x if self.var is None else alpha * x + (1 - alpha) * self.var
+        self.n  += 1
         return math.sqrt(self.var)
+
+    @property
+    def ready(self) -> bool:
+        return self.n >= self.warmup
 
 
 class MultiHorizonVol:
     def __init__(self):
-        self.fast = EWMAVolatility(tau_seconds=10)
-        self.mid  = EWMAVolatility(tau_seconds=60)
-        self.slow = EWMAVolatility(tau_seconds=300)
+        self.fast = EWMAVolatility(tau_seconds=10, warmup=100)
+        self.mid  = EWMAVolatility(tau_seconds=60, warmup=100)
+        self.slow = EWMAVolatility(tau_seconds=300, warmup=100)
 
     def update(self, log_ret: float, dt: float, best_bid: float, best_ask: float) -> dict:
         spread_vol = math.log(best_ask / best_bid) / math.sqrt(4 * math.log(2))
@@ -35,6 +42,10 @@ class MultiHorizonVol:
             "vol_60s": min(v_mid,  cap),
             "vol_5m":  min(v_slow, cap),
         }
+
+    @property
+    def warmed_up(self) -> bool:
+        return self.fast.ready and self.mid.ready and self.slow.ready
 
 
 class AlphaSignal:

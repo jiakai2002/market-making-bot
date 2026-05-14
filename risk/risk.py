@@ -1,4 +1,4 @@
-from config import MAX_INVENTORY, MAX_VOL, MAX_TOXICITY, MAX_STALE_MS
+from config import MAX_INVENTORY, MAX_VOL, MAX_TOXICITY, MAX_STALE_MS, ALPHA_THRESHOLD
 
 
 class KillSwitch:
@@ -27,30 +27,44 @@ class KillSwitch:
 
 class RiskLimits:
     def __init__(self):
-        self.max_inventory = MAX_INVENTORY
-        self.max_vol       = MAX_VOL
-        self.max_toxicity  = MAX_TOXICITY
-        self.max_stale_ms  = MAX_STALE_MS
+        self.max_inventory  = MAX_INVENTORY
+        self.max_vol        = MAX_VOL
+        self.max_toxicity   = MAX_TOXICITY
+        self.max_stale_ms   = MAX_STALE_MS
+        self.alpha_threshold = ALPHA_THRESHOLD
         self.reasons: list[str] = []
 
-    def allow_quotes(self, inventory, vol, tfi, last_update_ms, now_ms, mid):
+    def allow_quotes(self, inventory, vol, tfi, last_update_ms, now_ms, mid, alpha=0.0):
         self.reasons = []
-        hard_block = []
+
+        # ── Hard stops — block both sides ──────────────────────────────
         if vol * mid > self.max_vol:
-            hard_block.append("vol")
-        if (now_ms - last_update_ms) > self.max_stale_ms:
-            hard_block.append("stale")
-        if hard_block:
-            self.reasons = hard_block
+            self.reasons.append("vol")
             return False, False
 
-        bid_ok = inventory <  self.max_inventory
-        ask_ok = inventory > -self.max_inventory
+        if (now_ms - last_update_ms) > self.max_stale_ms:
+            self.reasons.append("stale")
+            return False, False
 
         if abs(tfi) > self.max_toxicity:
             self.reasons.append("toxicity")
             return False, False
 
-        if not bid_ok: self.reasons.append("inventory")
-        if not ask_ok: self.reasons.append("inventory")
+        # ── Per-side checks ────────────────────────────────────────────
+        bid_ok = inventory < self.max_inventory
+        ask_ok = inventory > -self.max_inventory
+
+        if not bid_ok:
+            self.reasons.append("inventory_long")
+        if not ask_ok:
+            self.reasons.append("inventory_short")
+
+        if bid_ok and alpha < -self.alpha_threshold:
+            bid_ok = False
+            self.reasons.append("alpha_sell")
+
+        if ask_ok and alpha > self.alpha_threshold:
+            ask_ok = False
+            self.reasons.append("alpha_buy")
+
         return bid_ok, ask_ok

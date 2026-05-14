@@ -14,23 +14,24 @@ W_TRADE_IMBALANCE = 0.45
 W_MICROPRICE_EDGE = 0.10
 
 # Strategy
-BASE_SPREAD    = 0.5
-VOL_MULT       = 5.0
+BASE_SPREAD    = 0.05
+VOL_MULT       = 3.0
 TOX_MULT       = 2.0
-INV_K          = 2.0
-TICK_SIZE      = 0.5
-QUOTE_SIZE     = 0.01
+INV_K          = 15.0
+TICK_SIZE      = 0.01
+QUOTE_SIZE     = 0.005
 
 # Risk
 MAX_INVENTORY  = 0.1
-MAX_VOL        = 20.0
-MAX_TOXICITY   = 0.7
+MAX_VOL        = 5.0
+MAX_TOXICITY   = 0.95
 MAX_STALE_MS   = 5000
+ALPHA_THRESHOLD = 0.3
 
 # Exchange
-FEE_BPS        = 1.5
-FILL_PROB      = 0.7
+FEE_BPS        = 10
+FILL_K         = 0.0001  # fill rate in BTC/$
 
 # Session
 SNAPSHOT_INTERVAL = 1.0
-SAVE_INTERVAL     = 300   # seconds between parquet flushes
+SAVE_INTERVAL     = 300

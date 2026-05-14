@@ -1,121 +1,104 @@
+import math
 import random
 from dataclasses import dataclass
+from config import FEE_BPS, FILL_K
 
 
 @dataclass
 class Order:
-    id: int
-    side: str
-    price: float
-    size: float
-    filled: float = 0.0
-    status: str = "open"
+    id:          int
+    side:        str
+    price:       float
+    size:        float
+    queue_depth: float = 0.0
 
 
 @dataclass
 class Fill:
-    order_id: int
-    side: str
-    price: float
-    size: float
-    fee: float
+    order_id:  int
+    side:      str
+    price:     float
+    size:      float
+    fee:       float
     timestamp: int
 
 
 class Exchange:
-    def __init__(self, fee_bps: float = 1.5, fill_prob: float = 0.7):
-        self.fee = fee_bps / 10_000
-        self.fill_prob = fill_prob
+    def __init__(self):
+        self.fee        = FEE_BPS / 10_000
+        self.fill_k     = FILL_K
+        self.orders:    dict[int, Order] = {}
+        self.fills:     list[Fill]       = []
+        self.next_id    = 0
+        self.cash_flow  = 0.0
+        self.order_count = 0
 
-        self.orders: dict[int, Order] = {}
-        self.fills: list[Fill] = []
-        self.next_id = 0
-
-        self.cash_flow = 0.0
-
-    def place_limit_order(self, side: str, price: float, size: float, timestamp: int) -> int:
+    def place_limit_order(self, side: str, price: float, size: float, timestamp: int, queue_depth: float = 0.0) -> int:
         oid = self.next_id
-        self.next_id += 1
-
-        self.orders[oid] = Order(
-            id=oid,
-            side=side,
-            price=price,
-            size=size,
-        )
+        self.next_id    += 1
+        self.order_count += 1
+        self.orders[oid] = Order(id=oid, side=side, price=price, size=size, queue_depth=queue_depth)
         return oid
 
     def cancel_all(self):
         self.orders.clear()
 
+    def _fill_prob(self, order: Order, best_bid: float, best_ask: float) -> float:
+        # Queue position model with 50% queue assumption
+        queue_ahead = max(order.queue_depth * 0.5, 1e-8)
+        mid = (best_bid + best_ask) / 2
+        expected_vol = self.fill_k * mid
+
+        return 1.0 - math.exp(-expected_vol / queue_ahead)
+
     def check_fills(self, row: dict) -> list[Fill]:
         best_bid = row["bid_0_price"]
         best_ask = row["ask_0_price"]
-        ts = row["timestamp"]
-
+        ts       = row["timestamp"]
         new_fills = []
 
-        for oid in list(self.orders.keys()):
+        for oid in list(self.orders):
             o = self.orders.get(oid)
             if not o:
                 continue
 
-            # ---- CROSSING LOGIC ----
             crossed = (
-                (o.side == "buy" and best_ask <= o.price) or
+                (o.side == "buy"  and best_ask <= o.price) or
                 (o.side == "sell" and best_bid >= o.price)
             )
-
             if not crossed:
                 continue
 
-            # ---- PROBABILISTIC FILL ----
-            if random.random() > self.fill_prob:
+            if random.random() > self._fill_prob(o, best_bid, best_ask):
                 continue
 
-            fill_size = o.size - o.filled
+            fee = o.size * o.price * self.fee
 
-            fee = fill_size * o.price * self.fee
-
-            # ---- CASHFLOW UPDATE ----
             if o.side == "buy":
-                self.cash_flow -= fill_size * o.price + fee
+                self.cash_flow -= o.size * o.price + fee
             else:
-                self.cash_flow += fill_size * o.price - fee
+                self.cash_flow += o.size * o.price - fee
 
-            fill = Fill(
-                order_id=o.id,
-                side=o.side,
-                price=o.price,
-                size=fill_size,
-                fee=fee,
-                timestamp=ts,
-            )
-
+            fill = Fill(order_id=o.id, side=o.side, price=o.price,
+                        size=o.size, fee=fee, timestamp=ts)
             self.fills.append(fill)
             new_fills.append(fill)
-
-            o.filled += fill_size
-            o.status = "filled"
-
             del self.orders[oid]
 
         return new_fills
 
     @property
     def inventory(self) -> float:
-        return sum(
-            f.size if f.side == "buy" else -f.size
-            for f in self.fills
-        )
+        return sum(f.size if f.side == "buy" else -f.size for f in self.fills)
 
     def pnl(self, mid: float) -> float:
         return self.cash_flow + self.inventory * mid
 
     def summary(self) -> dict:
         return {
-            "fills": len(self.fills),
+            "fills":       len(self.fills),
+            "orders":      self.order_count,
             "open_orders": len(self.orders),
-            "fees": sum(f.fee for f in self.fills),
-            "inventory": self.inventory,
+            "fees":        sum(f.fee for f in self.fills),
+            "inventory":   self.inventory,
         }
